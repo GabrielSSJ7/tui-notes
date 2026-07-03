@@ -1,0 +1,15 @@
+[package]
+name = "tui-notes"
+version = "0.1.0"
+edition = "2021"
+description = "TUI notes browser: fuzzy file tree over ~/.local/tui-notes, neovim editing, sqlite reminders"
+license = "MIT"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+rusqlite = { version = "0.32", features = ["bundled"] }
+nucleo-matcher = "0.3"
+walkdir = "2"
+chrono = "0.4"
+anyhow = "1"
