@@ -51,7 +51,8 @@ Notes live in `~/.local/tui-notes` (override with `$TUI_NOTES_DIR`). Only
 | `q`            | quit                                         |
 
 `.md` notes render as markdown in the preview (headings, bullets, code,
-quotes); `.txt` shows raw.
+quotes); `.txt` shows raw. Editing uses neovim by default; set
+`$TUI_NOTES_EDITOR` to override.
 
 ### Add reminders from the shell
 

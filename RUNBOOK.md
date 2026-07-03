@@ -32,6 +32,13 @@ and dismiss. Invoked from a terminal; wired to Hyprland `SUPER+ALT+N`.
 `cargo test` is THE test command referenced by the code-style contract.
 Every new function gets a test; every bug fix gets a regression test.
 
+Unit tests live beside their module (`#[cfg(test)]`). End-to-end coverage is
+`tests/tui_pty.rs`: it launches the real binary in a pseudo-terminal
+(`portable-pty`), types keystrokes, and asserts on sqlite + filesystem side
+effects after the app quits — never on scraped ANSI. It stubs the editor with
+`TUI_NOTES_EDITOR=true`. When you add a keybind with an observable effect, add
+a pty case for it.
+
 ## 3. Module map (one responsibility each, files < 500 lines)
 
 ```
@@ -81,8 +88,10 @@ in `app.rs`, anything triggered by a keypress in `input.rs`.
   Change extensions there and nowhere else.
 - **Dismiss is soft.** `dismiss` sets `dismissed_at`; rows are never deleted.
   `active()` filters `dismissed_at IS NULL`. Preserve the audit trail.
-- **Editor is neovim**, launched as `nvim <path>`. After it exits you MUST
-  `terminal.clear()` and `reload()` — nvim leaves the screen dirty.
+- **Editor is neovim by default**, launched as `nvim <path>` via
+  `editor::open`. `$TUI_NOTES_EDITOR` overrides the command (power users; and
+  the pty tests stub it with `true`). After it exits you MUST `terminal.clear()`
+  and `reload()` — the editor leaves the screen dirty.
 - **Search empty ⇒ tree view.** `is_searching()` is the switch; `list_len`
   and `selected_file` branch on it. Keep both branches in sync.
 - **Search scope** (`SearchScope::Name`/`Content`) picks fuzzy-name vs

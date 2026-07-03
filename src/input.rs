@@ -169,7 +169,7 @@ impl App {
         let Some(path) = self.selected_file() else {
             return Ok(());
         };
-        editor::edit_in_neovim(&path)?;
+        editor::open(&path)?;
         terminal.clear()?;
         self.reload()
     }
@@ -298,7 +298,7 @@ impl App {
         match fs_ops::create_note(&dir, &self.prompt_input) {
             Ok(path) => {
                 self.mode = Mode::Normal;
-                editor::edit_in_neovim(&path)?;
+                editor::open(&path)?;
                 terminal.clear()?;
                 self.reload()?;
                 self.select_path(&path);
