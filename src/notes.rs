@@ -107,6 +107,11 @@ pub fn is_note_file(path: &Path) -> bool {
     )
 }
 
+/// True for `.md` files, which the preview pane renders as markdown.
+pub fn is_markdown(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()) == Some("md")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

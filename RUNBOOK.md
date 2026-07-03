@@ -26,6 +26,7 @@ and dismiss. Invoked from a terminal; wired to Hyprland `SUPER+ALT+N`.
 | Lint        | `cargo clippy --all-targets -- -D warnings`         |
 | Format      | `cargo fmt`                                          |
 | Run (dev)   | `TUI_NOTES_DIR=/tmp/notes cargo run`                |
+| Remind CLI  | `cargo run -- remind "text" --due 2026-07-10`       |
 | Install     | `./install.sh`                                       |
 
 `cargo test` is THE test command referenced by the code-style contract.
@@ -35,23 +36,32 @@ Every new function gets a test; every bug fix gets a regression test.
 
 ```
 src/
-  main.rs      binary entry: resolve notes dir, init/restore terminal
+  main.rs      binary entry: resolve notes dir, `remind` subcommand, run TUI
   lib.rs       crate root: re-exports modules for tests + binary
-  app.rs       App state machine, event dispatch, data refresh  (largest file)
+  app.rs       App state + data refresh (accessors, reload, search recompute)
+  input.rs     impl App: all key handling, navigation, editing, note CRUD
   models.rs    Reminder type + is_overdue
   store.rs     ReminderStore — rusqlite CRUD (add/active/dismiss)
-  notes.rs     NoteTree — filesystem tree, expand/collapse, all_files
+  notes.rs     NoteTree — filesystem tree, expand/collapse, all_files, is_*
   fuzzy.rs     nucleo-matcher wrapper: filter(query, labels) -> indices
+  content.rs   full-text search: substring match over file contents -> hits
+  md.rs        tiny markdown -> ratatui Text renderer for the preview pane
+  fs_ops.rs    create/rename/delete note (name sanitizing, ext defaulting)
+  cli.rs       `remind` subcommand arg parsing + insert
   editor.rs    edit_in_neovim: suspend TUI, spawn nvim, restore
   ui/
-    mod.rs        layout + render() entry + focus_style
-    tree.rs       left panel: tree rows OR search hits
+    mod.rs        layout + render() entry + focus_style + popup dispatch
+    tree.rs       left panel: tree rows OR search hits (+ content snippet)
     reminders.rs  right-top panel: reminders, OVERDUE styling
-    preview.rs    right-bottom panel: raw text of selected note
-    search.rs     top-left: search input line
+    preview.rs    right-bottom panel: markdown (.md) or raw (.txt)
+    search.rs     top-left: search input line + scope indicator
     footer.rs     bottom: contextual keybind hints + status
-    add_popup.rs  centered popup for two-step reminder entry
+    popup.rs      centered modal: reminder / new-note+rename / delete-confirm
 ```
+
+`app.rs` holds state and pure data transitions; `input.rs` holds the event
+handlers as a second `impl App` block. Keep that split: state/rendering data
+in `app.rs`, anything triggered by a keypress in `input.rs`.
 
 ## 4. Data flow
 
@@ -75,6 +85,14 @@ src/
   `terminal.clear()` and `reload()` — nvim leaves the screen dirty.
 - **Search empty ⇒ tree view.** `is_searching()` is the switch; `list_len`
   and `selected_file` branch on it. Keep both branches in sync.
+- **Search scope** (`SearchScope::Name`/`Content`) picks fuzzy-name vs
+  content-substring in `recompute_search`. Both return `SearchHit` indices
+  into `files`; content hits carry a snippet, name hits don't.
+- **Markdown preview only for `.md`** — gated by `notes::is_markdown`; `.txt`
+  renders raw. `md::render` is a reader hint, not full CommonMark.
+- **Note names are sanitized** in `fs_ops::sanitize`: no `/`, no `..`, so
+  create/rename can't escape the note's directory. Extensionless names get
+  `.md`. Keep that gate; never build note paths from raw input elsewhere.
 - Functions 4–20 lines, max 2 indent levels, early returns. Exceptions carry
   the offending value (see `parse_due`).
 

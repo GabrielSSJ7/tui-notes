@@ -1,14 +1,13 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use chrono::{Local, NaiveDate};
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use chrono::NaiveDate;
 use ratatui::DefaultTerminal;
 
-use crate::editor;
+use crate::content;
 use crate::fuzzy;
 use crate::models::Reminder;
-use crate::notes::{NoteTree, TreeNode};
+use crate::notes::{self, NoteTree, TreeNode};
 use crate::store::ReminderStore;
 use crate::ui;
 
@@ -20,6 +19,8 @@ pub enum Mode {
     Normal,
     Search,
     AddReminder,
+    Prompt,
+    Confirm,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -35,24 +36,46 @@ pub enum AddStage {
     Due,
 }
 
+/// Whether `/` search filters by filename (fuzzy) or file content (substring).
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum SearchScope {
+    Name,
+    Content,
+}
+
+/// Which single-line prompt is active in `Mode::Prompt`.
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum PromptKind {
+    NewNote,
+    Rename,
+}
+
+/// A search result: index into `files`, plus a content snippet when the match
+/// came from file content rather than the name.
+pub struct SearchHit {
+    pub file: usize,
+    pub snippet: Option<String>,
+}
+
 /// One rendered row of the left panel (tree node or search hit).
 pub struct TreeRow {
     pub text: String,
     pub is_dir: bool,
 }
 
-/// Whole-application state. Field visibility is `pub` where the `ui` module
-/// needs read access; mutation stays behind the methods below.
+/// Whole-application state. Fields are `pub(crate)` so `ui` can read them and
+/// `input` can drive transitions; construction and data refresh live here.
 pub struct App {
     pub notes_dir: PathBuf,
-    tree: NoteTree,
-    visible: Vec<TreeNode>,
-    files: Vec<PathBuf>,
-    file_labels: Vec<String>,
-    results: Vec<usize>,
+    pub(crate) tree: NoteTree,
+    pub(crate) visible: Vec<TreeNode>,
+    pub(crate) files: Vec<PathBuf>,
+    pub(crate) file_labels: Vec<String>,
+    pub(crate) results: Vec<SearchHit>,
     pub selected: usize,
     pub search: String,
-    store: ReminderStore,
+    pub search_scope: SearchScope,
+    pub(crate) store: ReminderStore,
     pub reminders: Vec<Reminder>,
     pub rem_selected: usize,
     pub mode: Mode,
@@ -60,9 +83,14 @@ pub struct App {
     pub add_stage: AddStage,
     pub input_text: String,
     pub input_due: String,
+    pub prompt_kind: PromptKind,
+    pub prompt_input: String,
+    pub(crate) prompt_target: Option<PathBuf>,
+    pub(crate) delete_target: Option<PathBuf>,
     pub preview: String,
+    pub preview_is_md: bool,
     pub status: String,
-    should_quit: bool,
+    pub(crate) should_quit: bool,
 }
 
 impl App {
@@ -78,6 +106,7 @@ impl App {
             results: Vec::new(),
             selected: 0,
             search: String::new(),
+            search_scope: SearchScope::Name,
             store,
             reminders: Vec::new(),
             rem_selected: 0,
@@ -86,7 +115,12 @@ impl App {
             add_stage: AddStage::Text,
             input_text: String::new(),
             input_due: String::new(),
+            prompt_kind: PromptKind::NewNote,
+            prompt_input: String::new(),
+            prompt_target: None,
+            delete_target: None,
             preview: String::new(),
+            preview_is_md: false,
             status: String::new(),
             should_quit: false,
         };
@@ -122,11 +156,7 @@ impl App {
             return self
                 .results
                 .iter()
-                .filter_map(|&i| self.file_labels.get(i))
-                .map(|label| TreeRow {
-                    text: label.clone(),
-                    is_dir: false,
-                })
+                .filter_map(|hit| self.hit_row(hit))
                 .collect();
         }
         self.visible
@@ -136,6 +166,18 @@ impl App {
                 is_dir: node.is_dir,
             })
             .collect()
+    }
+
+    fn hit_row(&self, hit: &SearchHit) -> Option<TreeRow> {
+        let label = self.file_labels.get(hit.file)?;
+        let text = match &hit.snippet {
+            Some(snippet) => format!("{label}  — {snippet}"),
+            None => label.clone(),
+        };
+        Some(TreeRow {
+            text,
+            is_dir: false,
+        })
     }
 
     fn tree_label(&self, node: &TreeNode) -> String {
@@ -157,232 +199,58 @@ impl App {
         }
     }
 
-    // ---- event dispatch ------------------------------------------------------
+    // ---- selection / preview -------------------------------------------------
 
-    fn handle_event(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
-        let Event::Key(key) = event::read()? else {
-            return Ok(());
-        };
-        if key.kind != KeyEventKind::Press {
-            return Ok(());
-        }
-        match self.mode {
-            Mode::Normal => self.on_normal_key(key, terminal)?,
-            Mode::Search => self.on_search_key(key),
-            Mode::AddReminder => self.on_add_key(key)?,
-        }
-        Ok(())
-    }
-
-    fn on_normal_key(&mut self, key: KeyEvent, terminal: &mut DefaultTerminal) -> Result<()> {
-        match key.code {
-            KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
-            KeyCode::Char('j') | KeyCode::Down => self.move_down(),
-            KeyCode::Char('k') | KeyCode::Up => self.move_up(),
-            KeyCode::Tab => self.toggle_focus(),
-            KeyCode::Char('/') => self.enter_search(),
-            KeyCode::Char('a') => self.enter_add(),
-            KeyCode::Char('d') => self.dismiss_reminder()?,
-            KeyCode::Char('e') => self.edit_selected(terminal)?,
-            KeyCode::Char('r') => self.reload()?,
-            KeyCode::Enter | KeyCode::Char('l') => self.activate(terminal)?,
-            _ => {}
-        }
-        Ok(())
-    }
-
-    fn on_search_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc => self.exit_search(),
-            KeyCode::Enter => self.mode = Mode::Normal,
-            KeyCode::Down => self.move_down(),
-            KeyCode::Up => self.move_up(),
-            KeyCode::Backspace => {
-                self.search.pop();
-                self.recompute_search();
-            }
-            KeyCode::Char(c) => {
-                self.search.push(c);
-                self.recompute_search();
-            }
-            _ => {}
-        }
-    }
-
-    fn on_add_key(&mut self, key: KeyEvent) -> Result<()> {
-        match key.code {
-            KeyCode::Esc => self.cancel_add(),
-            KeyCode::Enter => self.advance_add()?,
-            KeyCode::Backspace => {
-                self.active_input().pop();
-            }
-            KeyCode::Char(c) => self.active_input().push(c),
-            _ => {}
-        }
-        Ok(())
-    }
-
-    // ---- navigation ----------------------------------------------------------
-
-    fn move_down(&mut self) {
-        match self.focus {
-            Focus::Tree => {
-                if self.selected + 1 < self.list_len() {
-                    self.selected += 1;
-                    self.update_preview();
-                }
-            }
-            Focus::Reminders => {
-                if self.rem_selected + 1 < self.reminders.len() {
-                    self.rem_selected += 1;
-                }
-            }
-        }
-    }
-
-    fn move_up(&mut self) {
-        match self.focus {
-            Focus::Tree => {
-                if self.selected > 0 {
-                    self.selected -= 1;
-                    self.update_preview();
-                }
-            }
-            Focus::Reminders => self.rem_selected = self.rem_selected.saturating_sub(1),
-        }
-    }
-
-    fn toggle_focus(&mut self) {
-        self.focus = match self.focus {
-            Focus::Tree => Focus::Reminders,
-            Focus::Reminders => Focus::Tree,
-        };
-    }
-
-    // ---- activation / editing ------------------------------------------------
-
-    fn activate(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
+    pub(crate) fn selected_file(&self) -> Option<PathBuf> {
         if self.is_searching() {
-            return self.edit_selected(terminal);
-        }
-        let Some(node) = self.visible.get(self.selected) else {
-            return Ok(());
-        };
-        if node.is_dir {
-            let path = node.path.clone();
-            self.tree.toggle(&path);
-            self.refresh_tree();
-        } else {
-            self.edit_selected(terminal)?;
-        }
-        Ok(())
-    }
-
-    fn edit_selected(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
-        let Some(path) = self.selected_file() else {
-            return Ok(());
-        };
-        editor::edit_in_neovim(&path)?;
-        terminal.clear()?;
-        self.reload()?;
-        Ok(())
-    }
-
-    fn selected_file(&self) -> Option<PathBuf> {
-        if self.is_searching() {
-            let idx = *self.results.get(self.selected)?;
-            return self.files.get(idx).cloned();
+            let hit = self.results.get(self.selected)?;
+            return self.files.get(hit.file).cloned();
         }
         let node = self.visible.get(self.selected)?;
         (!node.is_dir).then(|| node.path.clone())
     }
 
+    pub(crate) fn update_preview(&mut self) {
+        match self.selected_file() {
+            Some(path) => {
+                self.preview_is_md = notes::is_markdown(&path);
+                self.preview = read_preview(&path);
+            }
+            None => {
+                self.preview.clear();
+                self.preview_is_md = false;
+            }
+        }
+    }
+
     // ---- search --------------------------------------------------------------
 
-    fn enter_search(&mut self) {
-        self.mode = Mode::Search;
-        self.focus = Focus::Tree;
-        self.selected = 0;
-    }
-
-    fn exit_search(&mut self) {
-        self.search.clear();
-        self.results.clear();
-        self.mode = Mode::Normal;
-        self.selected = 0;
-        self.update_preview();
-    }
-
-    fn recompute_search(&mut self) {
-        self.results = fuzzy::filter(&self.search, &self.file_labels);
+    pub(crate) fn recompute_search(&mut self) {
+        self.results = match self.search_scope {
+            SearchScope::Name => fuzzy::filter(&self.search, &self.file_labels)
+                .into_iter()
+                .map(|file| SearchHit {
+                    file,
+                    snippet: None,
+                })
+                .collect(),
+            SearchScope::Content => content::search(&self.search, &self.files)
+                .into_iter()
+                .map(|hit| SearchHit {
+                    file: hit.file,
+                    snippet: Some(hit.snippet),
+                })
+                .collect(),
+        };
         if self.selected >= self.list_len() {
             self.selected = 0;
         }
         self.update_preview();
     }
 
-    // ---- reminders -----------------------------------------------------------
-
-    fn enter_add(&mut self) {
-        self.mode = Mode::AddReminder;
-        self.add_stage = AddStage::Text;
-        self.input_text.clear();
-        self.input_due.clear();
-        self.status.clear();
-    }
-
-    fn cancel_add(&mut self) {
-        self.mode = Mode::Normal;
-        self.status.clear();
-    }
-
-    fn active_input(&mut self) -> &mut String {
-        match self.add_stage {
-            AddStage::Text => &mut self.input_text,
-            AddStage::Due => &mut self.input_due,
-        }
-    }
-
-    fn advance_add(&mut self) -> Result<()> {
-        if self.add_stage == AddStage::Text {
-            if self.input_text.trim().is_empty() {
-                self.status = "reminder text is empty".into();
-                return Ok(());
-            }
-            self.add_stage = AddStage::Due;
-            return Ok(());
-        }
-        self.save_reminder()
-    }
-
-    fn save_reminder(&mut self) -> Result<()> {
-        let due = match parse_due(&self.input_due) {
-            Ok(due) => due,
-            Err(message) => {
-                self.status = message;
-                return Ok(());
-            }
-        };
-        self.store
-            .add(self.input_text.trim(), due, Local::now().timestamp())?;
-        self.mode = Mode::Normal;
-        self.status = "reminder added".into();
-        self.refresh_reminders()
-    }
-
-    fn dismiss_reminder(&mut self) -> Result<()> {
-        let Some(reminder) = self.reminders.get(self.rem_selected) else {
-            return Ok(());
-        };
-        self.store.dismiss(reminder.id, Local::now().timestamp())?;
-        self.refresh_reminders()?;
-        self.status = "reminder dismissed".into();
-        Ok(())
-    }
-
     // ---- data refresh --------------------------------------------------------
 
-    fn reload(&mut self) -> Result<()> {
+    pub(crate) fn reload(&mut self) -> Result<()> {
         self.refresh_tree();
         self.refresh_files();
         self.recompute_search();
@@ -408,19 +276,12 @@ impl App {
             .collect();
     }
 
-    fn refresh_reminders(&mut self) -> Result<()> {
+    pub(crate) fn refresh_reminders(&mut self) -> Result<()> {
         self.reminders = self.store.active()?;
         if self.rem_selected >= self.reminders.len() {
             self.rem_selected = self.reminders.len().saturating_sub(1);
         }
         Ok(())
-    }
-
-    fn update_preview(&mut self) {
-        self.preview = match self.selected_file() {
-            Some(path) => read_preview(&path),
-            None => String::new(),
-        };
     }
 }
 
@@ -445,7 +306,7 @@ fn read_preview(path: &Path) -> String {
 }
 
 /// Parse the due-date field: empty is `None`; otherwise `YYYY-MM-DD`.
-fn parse_due(input: &str) -> Result<Option<NaiveDate>, String> {
+pub(crate) fn parse_due(input: &str) -> Result<Option<NaiveDate>, String> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return Ok(None);

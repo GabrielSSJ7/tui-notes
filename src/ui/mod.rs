@@ -1,5 +1,5 @@
-mod add_popup;
 mod footer;
+mod popup;
 mod preview;
 mod reminders;
 mod search;
@@ -12,7 +12,7 @@ use ratatui::Frame;
 use crate::app::{App, Mode};
 
 /// Draw the full layout: search + tree (left), reminders + preview (right),
-/// a footer, and the add-reminder popup when active.
+/// a footer, and a modal popup when a popup mode is active.
 pub fn render(frame: &mut Frame, app: &App) {
     let area = frame.area();
     let outer = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
@@ -28,8 +28,11 @@ pub fn render(frame: &mut Frame, app: &App) {
     preview::render(frame, right[1], app);
     footer::render(frame, outer[1], app);
 
-    if app.mode == Mode::AddReminder {
-        add_popup::render(frame, area, app);
+    match app.mode {
+        Mode::AddReminder => popup::reminder(frame, area, app),
+        Mode::Prompt => popup::prompt(frame, area, app),
+        Mode::Confirm => popup::confirm(frame, area, app),
+        _ => {}
     }
 }
 

@@ -3,7 +3,7 @@ use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 
-use crate::app::{App, Mode};
+use crate::app::{App, Mode, SearchScope};
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let active = app.mode == Mode::Search;
@@ -13,10 +13,14 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         Style::default().fg(Color::DarkGray)
     };
+    let title = match app.search_scope {
+        SearchScope::Name => "search · name (Tab: content)",
+        SearchScope::Content => "search · content (Tab: name)",
+    };
     let paragraph = Paragraph::new(format!("🔍 {}{cursor}", app.search)).block(
         Block::default()
             .borders(Borders::ALL)
-            .title("search")
+            .title(title)
             .border_style(style),
     );
     frame.render_widget(paragraph, area);
