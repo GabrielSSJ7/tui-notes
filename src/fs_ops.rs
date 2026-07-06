@@ -16,6 +16,16 @@ pub fn create_note(dir: &Path, name: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// Create a subdirectory named `name` inside `dir`. Errors if it exists.
+pub fn create_folder(dir: &Path, name: &str) -> Result<PathBuf> {
+    let path = dir.join(sanitize(name)?);
+    if path.exists() {
+        bail!("folder already exists: {}", path.display());
+    }
+    std::fs::create_dir_all(&path)?;
+    Ok(path)
+}
+
 /// Rename `path` to `new_name` within its own directory.
 pub fn rename(path: &Path, new_name: &str) -> Result<PathBuf> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
@@ -69,5 +79,18 @@ mod tests {
         assert_eq!(ensure_note_ext(PathBuf::from("todo")), Path::new("todo.md"));
         assert_eq!(ensure_note_ext(PathBuf::from("a.txt")), Path::new("a.txt"));
         assert_eq!(ensure_note_ext(PathBuf::from("a.md")), Path::new("a.md"));
+    }
+
+    #[test]
+    fn create_folder_makes_dir_and_rejects_dup() {
+        let base = std::env::temp_dir().join(format!("tui-notes-ut-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+
+        let made = create_folder(&base, "projects").unwrap();
+        assert!(made.is_dir());
+        assert!(create_folder(&base, "projects").is_err());
+
+        std::fs::remove_dir_all(&base).unwrap();
     }
 }

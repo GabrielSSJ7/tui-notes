@@ -9,7 +9,7 @@ use crate::app::{App, Mode};
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let keys = match app.mode {
         Mode::Normal => {
-            "j/k move  Enter open/expand  e edit  n new  R rename  D del  / search  a add  d dismiss  Tab focus  q quit"
+            "j/k move  Enter open/expand  e edit  n note  N folder  R rename  D del  / search  a add  d dismiss  Tab focus  q quit"
         }
         Mode::Search => "type to filter  Tab name/content  up/down move  Enter accept  Esc clear",
         Mode::AddReminder => "type text  Enter next/save  Esc cancel",

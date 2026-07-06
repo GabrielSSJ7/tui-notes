@@ -40,6 +40,7 @@ impl App {
             KeyCode::Char('d') => self.dismiss_reminder()?,
             KeyCode::Char('e') => self.edit_selected(terminal)?,
             KeyCode::Char('n') => self.begin_new_note(),
+            KeyCode::Char('N') => self.begin_new_folder(),
             KeyCode::Char('R') => self.begin_rename(),
             KeyCode::Char('D') => self.begin_delete(),
             KeyCode::Char('r') => self.reload()?,
@@ -259,6 +260,14 @@ impl App {
         self.mode = Mode::Prompt;
     }
 
+    fn begin_new_folder(&mut self) {
+        self.prompt_kind = PromptKind::NewFolder;
+        self.prompt_target = None;
+        self.prompt_input.clear();
+        self.status.clear();
+        self.mode = Mode::Prompt;
+    }
+
     fn begin_rename(&mut self) {
         let Some(path) = self.selected_file() else {
             self.status = "select a file to rename".into();
@@ -289,8 +298,23 @@ impl App {
     fn submit_prompt(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         match self.prompt_kind {
             PromptKind::NewNote => self.finish_new_note(terminal),
+            PromptKind::NewFolder => self.finish_new_folder(),
             PromptKind::Rename => self.finish_rename(),
         }
+    }
+
+    fn finish_new_folder(&mut self) -> Result<()> {
+        let dir = self.new_note_dir();
+        match fs_ops::create_folder(&dir, &self.prompt_input) {
+            Ok(path) => {
+                self.mode = Mode::Normal;
+                self.reload()?;
+                self.select_path(&path);
+                self.status = "folder created".into();
+            }
+            Err(err) => self.status = err.to_string(),
+        }
+        Ok(())
     }
 
     fn finish_new_note(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {

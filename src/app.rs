@@ -47,6 +47,7 @@ pub enum SearchScope {
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum PromptKind {
     NewNote,
+    NewFolder,
     Rename,
 }
 

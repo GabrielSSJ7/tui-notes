@@ -115,8 +115,16 @@ in `app.rs`, anything triggered by a keypress in `input.rs`.
 4. `ui/reminders.rs`: render it.
 
 ### Add a keybind
-1. `app.rs`: add the arm in the relevant `on_*_key`.
+1. `input.rs`: add the arm in the relevant `on_*_key`.
 2. `ui/footer.rs`: document it in the hint string for that mode.
+3. If it has an observable effect, add a `tests/tui_pty.rs` case.
+
+### Add a note/folder prompt action
+1. `app.rs`: add a `PromptKind` variant.
+2. `input.rs`: `begin_*` (sets `prompt_kind` + `Mode::Prompt`) and a
+   `finish_*` reached from `submit_prompt`; go through `fs_ops` for the FS write.
+3. `ui/popup.rs`: add the `(title, label)` arm.
+4. `ui/footer.rs`: document the key.
 
 ### Support another extension
 1. `notes.rs::is_note_file`: add the arm. Its unit test covers it.

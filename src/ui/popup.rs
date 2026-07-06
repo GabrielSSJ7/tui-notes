@@ -13,13 +13,14 @@ pub fn reminder(frame: &mut Frame, area: Rect, app: &App) {
     draw(frame, area, "add reminder", label, value);
 }
 
-/// Single-line prompt popup for creating or renaming a note.
+/// Single-line prompt popup for creating a note/folder or renaming a note.
 pub fn prompt(frame: &mut Frame, area: Rect, app: &App) {
-    let title = match app.prompt_kind {
-        PromptKind::NewNote => "new note",
-        PromptKind::Rename => "rename note",
+    let (title, label) = match app.prompt_kind {
+        PromptKind::NewNote => ("new note", "filename:"),
+        PromptKind::NewFolder => ("new folder", "folder name:"),
+        PromptKind::Rename => ("rename note", "new name:"),
     };
-    draw(frame, area, title, "filename:", &app.prompt_input);
+    draw(frame, area, title, label, &app.prompt_input);
 }
 
 /// Yes/no delete confirmation popup.

@@ -41,6 +41,7 @@ Notes live in `~/.local/tui-notes` (override with `$TUI_NOTES_DIR`). Only
 | `Enter`/`l`    | expand/collapse dir, or open note            |
 | `e`            | open selected note in neovim                 |
 | `n`            | new note (in selected dir), opens neovim     |
+| `N`            | new folder (in selected dir)                 |
 | `R`            | rename selected note                         |
 | `D`            | delete selected note (confirm with `y`)      |
 | `/`            | search; `Tab` toggles filename ↔ content     |

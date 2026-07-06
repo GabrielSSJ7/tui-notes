@@ -145,6 +145,19 @@ fn new_note_creates_file_on_disk() {
 }
 
 #[test]
+fn new_folder_creates_dir() {
+    let dir = scratch("new-folder");
+
+    let mut app = TuiSession::launch(&dir);
+    app.send(b"N"); // new-folder prompt
+    app.send(b"projects");
+    app.send(b"\r");
+    app.quit();
+
+    assert!(dir.join("projects").is_dir(), "folder should exist");
+}
+
+#[test]
 fn rename_note_moves_file() {
     let dir = scratch("rename-note");
     write_note(&dir, "old.md", "# old\n");
