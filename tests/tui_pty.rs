@@ -176,6 +176,44 @@ fn rename_note_moves_file() {
 }
 
 #[test]
+fn rename_folder_moves_dir_without_extension() {
+    let dir = scratch("rename-folder");
+    std::fs::create_dir(dir.join("olddir")).unwrap();
+
+    let mut app = TuiSession::launch(&dir);
+    app.send(b"R"); // rename prompt, pre-filled with "olddir"
+    for _ in 0..6 {
+        app.send(b"\x7f"); // Backspace over "olddir"
+    }
+    app.send(b"newdir");
+    app.send(b"\r");
+    app.quit();
+
+    assert!(
+        dir.join("newdir").is_dir(),
+        "renamed folder should exist (no .md)"
+    );
+    assert!(!dir.join("olddir").exists(), "old folder should be gone");
+}
+
+#[test]
+fn delete_folder_removes_dir_recursively() {
+    let dir = scratch("delete-folder");
+    std::fs::create_dir(dir.join("box")).unwrap();
+    write_note(&dir.join("box"), "inside.md", "x\n");
+
+    let mut app = TuiSession::launch(&dir);
+    app.send(b"D"); // delete selected folder -> confirm
+    app.send(b"y");
+    app.quit();
+
+    assert!(
+        !dir.join("box").exists(),
+        "folder and contents should be deleted"
+    );
+}
+
+#[test]
 fn delete_note_removes_file() {
     let dir = scratch("delete-note");
     write_note(&dir, "trash.md", "junk\n");

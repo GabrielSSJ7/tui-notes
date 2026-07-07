@@ -31,10 +31,15 @@ pub fn confirm(frame: &mut Frame, area: Rect, app: &App) {
         .and_then(|p| p.file_name())
         .and_then(|n| n.to_str())
         .unwrap_or("?");
+    let what = if app.delete_is_dir {
+        format!("delete folder '{name}' and ALL its contents?")
+    } else {
+        format!("delete '{name}'?")
+    };
     let popup = centered(area, 60, 5);
     frame.render_widget(Clear, popup);
     frame.render_widget(
-        Paragraph::new(format!("delete '{name}'?\n\n[y] confirm   [any] cancel")).block(
+        Paragraph::new(format!("{what}\n\n[y] confirm   [any] cancel")).block(
             Block::default()
                 .borders(Borders::ALL)
                 .title("confirm delete"),

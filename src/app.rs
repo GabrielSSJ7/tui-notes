@@ -87,7 +87,9 @@ pub struct App {
     pub prompt_kind: PromptKind,
     pub prompt_input: String,
     pub(crate) prompt_target: Option<PathBuf>,
+    pub(crate) prompt_is_dir: bool,
     pub(crate) delete_target: Option<PathBuf>,
+    pub delete_is_dir: bool,
     pub preview: String,
     pub preview_is_md: bool,
     pub status: String,
@@ -119,7 +121,9 @@ impl App {
             prompt_kind: PromptKind::NewNote,
             prompt_input: String::new(),
             prompt_target: None,
+            prompt_is_dir: false,
             delete_target: None,
+            delete_is_dir: false,
             preview: String::new(),
             preview_is_md: false,
             status: String::new(),
@@ -209,6 +213,17 @@ impl App {
         }
         let node = self.visible.get(self.selected)?;
         (!node.is_dir).then(|| node.path.clone())
+    }
+
+    /// The selected path and whether it is a directory — used by rename/delete,
+    /// which act on folders too (unlike `selected_file`). Search hits are files.
+    pub(crate) fn selected_entry(&self) -> Option<(PathBuf, bool)> {
+        if self.is_searching() {
+            let hit = self.results.get(self.selected)?;
+            return self.files.get(hit.file).map(|path| (path.clone(), false));
+        }
+        let node = self.visible.get(self.selected)?;
+        Some((node.path.clone(), node.is_dir))
     }
 
     pub(crate) fn update_preview(&mut self) {

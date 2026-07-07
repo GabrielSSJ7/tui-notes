@@ -102,6 +102,10 @@ in `app.rs`, anything triggered by a keypress in `input.rs`.
 - **Note names are sanitized** in `fs_ops::sanitize`: no `/`, no `..`, so
   create/rename can't escape the note's directory. Extensionless names get
   `.md`. Keep that gate; never build note paths from raw input elsewhere.
+- **Rename/delete act on the selected entry** (file OR folder) via
+  `selected_entry`, not `selected_file`. Folder rename keeps the raw name (no
+  `.md`); folder delete is `remove_dir_all` — recursive and destructive, so it
+  stays behind the `Mode::Confirm` `y` gate with a contents warning.
 - Functions 4–20 lines, max 2 indent levels, early returns. Exceptions carry
   the offending value (see `parse_due`).
 

@@ -26,10 +26,12 @@ pub fn create_folder(dir: &Path, name: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
-/// Rename `path` to `new_name` within its own directory.
-pub fn rename(path: &Path, new_name: &str) -> Result<PathBuf> {
+/// Rename `path` to `new_name` within its own directory. Files get a note
+/// extension defaulted; directories keep the raw name.
+pub fn rename(path: &Path, new_name: &str, is_dir: bool) -> Result<PathBuf> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    let target = ensure_note_ext(parent.join(sanitize(new_name)?));
+    let raw = parent.join(sanitize(new_name)?);
+    let target = if is_dir { raw } else { ensure_note_ext(raw) };
     if target.exists() {
         bail!("target already exists: {}", target.display());
     }
@@ -37,8 +39,13 @@ pub fn rename(path: &Path, new_name: &str) -> Result<PathBuf> {
     Ok(target)
 }
 
-pub fn delete(path: &Path) -> Result<()> {
-    std::fs::remove_file(path)?;
+/// Delete a note (file) or, when `is_dir`, a folder and all its contents.
+pub fn delete(path: &Path, is_dir: bool) -> Result<()> {
+    if is_dir {
+        std::fs::remove_dir_all(path)?;
+    } else {
+        std::fs::remove_file(path)?;
+    }
     Ok(())
 }
 

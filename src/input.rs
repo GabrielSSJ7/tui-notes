@@ -269,24 +269,26 @@ impl App {
     }
 
     fn begin_rename(&mut self) {
-        let Some(path) = self.selected_file() else {
-            self.status = "select a file to rename".into();
+        let Some((path, is_dir)) = self.selected_entry() else {
+            self.status = "select an item to rename".into();
             return;
         };
         self.prompt_kind = PromptKind::Rename;
         self.prompt_input = file_name(&path);
+        self.prompt_is_dir = is_dir;
         self.prompt_target = Some(path);
         self.status.clear();
         self.mode = Mode::Prompt;
     }
 
     fn begin_delete(&mut self) {
-        match self.selected_file() {
-            Some(path) => {
+        match self.selected_entry() {
+            Some((path, is_dir)) => {
                 self.delete_target = Some(path);
+                self.delete_is_dir = is_dir;
                 self.mode = Mode::Confirm;
             }
-            None => self.status = "select a file to delete".into(),
+            None => self.status = "select an item to delete".into(),
         }
     }
 
@@ -338,7 +340,7 @@ impl App {
             self.mode = Mode::Normal;
             return Ok(());
         };
-        match fs_ops::rename(&source, &self.prompt_input) {
+        match fs_ops::rename(&source, &self.prompt_input, self.prompt_is_dir) {
             Ok(path) => {
                 self.mode = Mode::Normal;
                 self.reload()?;
@@ -352,7 +354,7 @@ impl App {
 
     fn confirm_delete(&mut self) -> Result<()> {
         if let Some(path) = self.delete_target.take() {
-            fs_ops::delete(&path)?;
+            fs_ops::delete(&path, self.delete_is_dir)?;
             self.reload()?;
             self.status = "deleted".into();
         }
