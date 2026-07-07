@@ -1,7 +1,7 @@
 //! Keyboard event handling for `App`: mode-routed key dispatch plus the
 //! navigation, editing, reminder, and note-CRUD transitions it drives.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::Result;
 use chrono::Local;
@@ -306,7 +306,7 @@ impl App {
     }
 
     fn finish_new_folder(&mut self) -> Result<()> {
-        let dir = self.new_note_dir();
+        let dir = self.new_item_dir();
         match fs_ops::create_folder(&dir, &self.prompt_input) {
             Ok(path) => {
                 self.mode = Mode::Normal;
@@ -320,7 +320,7 @@ impl App {
     }
 
     fn finish_new_note(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
-        let dir = self.new_note_dir();
+        let dir = self.new_item_dir();
         match fs_ops::create_note(&dir, &self.prompt_input) {
             Ok(path) => {
                 self.mode = Mode::Normal;
@@ -360,23 +360,6 @@ impl App {
         }
         self.mode = Mode::Normal;
         Ok(())
-    }
-
-    /// Directory a new note lands in: the selected dir, the selected file's
-    /// parent, or the notes root (also used while searching).
-    fn new_note_dir(&self) -> PathBuf {
-        if self.is_searching() {
-            return self.tree.root().to_path_buf();
-        }
-        match self.visible.get(self.selected) {
-            Some(node) if node.is_dir => node.path.clone(),
-            Some(node) => node
-                .path
-                .parent()
-                .map(Path::to_path_buf)
-                .unwrap_or_default(),
-            None => self.tree.root().to_path_buf(),
-        }
     }
 
     fn select_path(&mut self, path: &Path) {

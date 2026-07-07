@@ -51,6 +51,10 @@ Notes live in `~/.local/tui-notes` (override with `$TUI_NOTES_DIR`). Only
 | `r`            | reload from disk                             |
 | `q`            | quit                                         |
 
+New notes/folders land **inside** the selected folder only when it's expanded;
+a collapsed folder (or a file) creates a sibling — so a root-level selection
+creates at the root. The create popup shows the destination directory.
+
 `.md` notes render as markdown in the preview (headings, bullets, code,
 quotes); `.txt` shows raw. Editing uses neovim by default; set
 `$TUI_NOTES_EDITOR` to override.

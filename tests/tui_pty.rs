@@ -158,6 +158,45 @@ fn new_folder_creates_dir() {
 }
 
 #[test]
+fn new_folder_lands_at_root_when_selected_dir_is_collapsed() {
+    let dir = scratch("folder-at-root");
+    std::fs::create_dir(dir.join("magalu")).unwrap(); // selected, collapsed
+
+    let mut app = TuiSession::launch(&dir);
+    app.send(b"N"); // collapsed dir selected -> sibling at root
+    app.send(b"fresh");
+    app.send(b"\r");
+    app.quit();
+
+    assert!(
+        dir.join("fresh").is_dir(),
+        "folder should be created at root"
+    );
+    assert!(
+        !dir.join("magalu/fresh").exists(),
+        "must not nest inside collapsed dir"
+    );
+}
+
+#[test]
+fn new_folder_nests_inside_expanded_dir() {
+    let dir = scratch("folder-nested");
+    std::fs::create_dir(dir.join("magalu")).unwrap();
+
+    let mut app = TuiSession::launch(&dir);
+    app.send(b"\r"); // expand the selected dir
+    app.send(b"N"); // expanded dir selected -> create inside
+    app.send(b"child");
+    app.send(b"\r");
+    app.quit();
+
+    assert!(
+        dir.join("magalu/child").is_dir(),
+        "folder should nest inside expanded dir"
+    );
+}
+
+#[test]
 fn rename_note_moves_file() {
     let dir = scratch("rename-note");
     write_note(&dir, "old.md", "# old\n");

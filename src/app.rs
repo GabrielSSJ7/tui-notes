@@ -215,6 +215,35 @@ impl App {
         (!node.is_dir).then(|| node.path.clone())
     }
 
+    /// Directory a new note/folder lands in. A new item goes *inside* the
+    /// selected folder only when that folder is expanded; a collapsed folder
+    /// (or a file) creates a sibling in its parent — so a root-level selection
+    /// creates at the root. Searching always targets the root.
+    pub(crate) fn new_item_dir(&self) -> PathBuf {
+        if self.is_searching() {
+            return self.tree.root().to_path_buf();
+        }
+        match self.visible.get(self.selected) {
+            Some(node) if node.is_dir && self.tree.is_expanded(&node.path) => node.path.clone(),
+            Some(node) => node
+                .path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| self.tree.root().to_path_buf()),
+            None => self.tree.root().to_path_buf(),
+        }
+    }
+
+    /// Root-relative label of `new_item_dir`, e.g. `/` or `/projects`.
+    pub fn new_item_dir_label(&self) -> String {
+        let dir = self.new_item_dir();
+        match dir.strip_prefix(self.tree.root()) {
+            Ok(rel) if rel.as_os_str().is_empty() => "/".to_string(),
+            Ok(rel) => format!("/{}", rel.display()),
+            Err(_) => dir.display().to_string(),
+        }
+    }
+
     /// The selected path and whether it is a directory — used by rename/delete,
     /// which act on folders too (unlike `selected_file`). Search hits are files.
     pub(crate) fn selected_entry(&self) -> Option<(PathBuf, bool)> {

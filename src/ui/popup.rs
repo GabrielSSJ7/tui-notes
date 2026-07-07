@@ -14,13 +14,21 @@ pub fn reminder(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 /// Single-line prompt popup for creating a note/folder or renaming a note.
+/// Create prompts show the destination directory so placement is never a
+/// surprise (new items land in an expanded folder, else at the current level).
 pub fn prompt(frame: &mut Frame, area: Rect, app: &App) {
     let (title, label) = match app.prompt_kind {
-        PromptKind::NewNote => ("new note", "filename:"),
-        PromptKind::NewFolder => ("new folder", "folder name:"),
-        PromptKind::Rename => ("rename note", "new name:"),
+        PromptKind::NewNote => (
+            format!("new note in {}", app.new_item_dir_label()),
+            "filename:",
+        ),
+        PromptKind::NewFolder => (
+            format!("new folder in {}", app.new_item_dir_label()),
+            "folder name:",
+        ),
+        PromptKind::Rename => ("rename".to_string(), "new name:"),
     };
-    draw(frame, area, title, label, &app.prompt_input);
+    draw(frame, area, &title, label, &app.prompt_input);
 }
 
 /// Yes/no delete confirmation popup.
